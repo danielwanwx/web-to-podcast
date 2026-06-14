@@ -24,7 +24,10 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--from-phase", choices=PHASES, default="source", help="First phase to force/regenerate when --force is used.")
     run_parser.add_argument("--to-phase", choices=PHASES, default="package", help="Stop after this phase.")
 
-    subparsers.add_parser("doctor", help="Check local runtime dependencies.")
+    doctor_parser = subparsers.add_parser("doctor", help="Check local runtime dependencies.")
+    doctor_parser.add_argument("--config", default="", help="Optional config file for workflow-specific checks.")
+    doctor_parser.add_argument("--voice-sample", default="", help="Override config voice_sample for doctor checks.")
+    doctor_parser.add_argument("--strict", action="store_true", help="Return non-zero when required configured checks fail.")
 
     status_parser = subparsers.add_parser("status", help="Inspect a run output directory.")
     status_parser.add_argument("--output-dir", required=True, help="Pipeline output directory containing manifest.json.")
@@ -38,8 +41,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
-        print(json.dumps(collect_doctor_report(), ensure_ascii=False, indent=2))
-        return 0
+        report = collect_doctor_report(args.config or None, voice_sample=args.voice_sample, strict=args.strict)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report.get("ok") else 1
     if args.command == "status":
         report = inspect_run(args.output_dir, expect_audio=args.expect_audio)
         print(json.dumps(report, ensure_ascii=False, indent=2))

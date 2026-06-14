@@ -8,6 +8,7 @@ from pathlib import Path
 
 from web_to_podcast.config import load_config
 from web_to_podcast.cli import main as cli_main
+from web_to_podcast.doctor import collect_doctor_report
 from web_to_podcast.extract import extract_readable_text
 from web_to_podcast.pipeline import run_pipeline
 from web_to_podcast.segments import split_tts_segment_specs
@@ -86,6 +87,26 @@ class PipelineSmokeTest(unittest.TestCase):
             path = root / script
             self.assertTrue(path.exists(), script)
             self.assertTrue(os.access(path, os.X_OK), script)
+
+    def test_config_aware_doctor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"output_dir": str(Path(tmp) / "out")},
+                        "source": {"local_files": []},
+                        "translation": {"enabled": True, "provider": "ollama", "model": "definitely-missing-model"},
+                        "tts": {"enabled": True, "provider": "vibevoice", "voice_sample": str(Path(tmp) / "missing.wav")},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = collect_doctor_report(str(config_path), strict=True)
+            self.assertFalse(report["ok"])
+            self.assertIn("checks", report)
+            self.assertTrue(any(issue["check"] in {"ollama_model", "voice_sample_exists"} for issue in report["issues"]))
+            self.assertEqual(cli_main(["doctor", "--config", str(config_path), "--strict"]), 1)
 
     def test_phase_limited_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -22,6 +22,7 @@ git clone <your-repo-url> web-to-podcast
 cd web-to-podcast
 scripts/bootstrap.sh
 source .venv/bin/activate
+web-to-podcast doctor
 ```
 
 Run the offline smoke sample without translation or TTS:
@@ -45,10 +46,13 @@ Run with Ollama translation and VibeVoice audio:
 
 ```bash
 pip install -e ".[tts]"
+web-to-podcast doctor --config examples/url_list.yaml --voice-sample /path/to/voice_sample.wav --strict
 web-to-podcast run \
   --config examples/url_list.yaml \
   --voice-sample /path/to/voice_sample.wav
 ```
+
+See [docs/vibevoice.md](docs/vibevoice.md) for the VibeVoice setup checklist.
 
 Enable optional ASR-based sample text leakage checks only when needed:
 
@@ -80,6 +84,18 @@ scripts/bootstrap.sh --asr
 
 The default translation model is `gemma4:31b`. Change it in the config if your
 local model name differs.
+
+## Full Workflow Doctor
+
+Before launching a long translation or audio job, run a config-aware check:
+
+```bash
+web-to-podcast doctor --config my-resource.yaml --voice-sample /path/to/sample.wav --strict
+```
+
+Strict mode returns a non-zero exit code if a configured dependency is missing,
+such as the Ollama model, Playwright for browser-rendered pages, VibeVoice, or
+the voice sample file.
 
 ## Make Targets
 
