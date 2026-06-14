@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import load_config
 from .doctor import collect_doctor_report
 from .pipeline import run_pipeline
+from .utils import slugify
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,9 +23,22 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("doctor", help="Check local runtime dependencies.")
 
+    init_parser = subparsers.add_parser("init-config", help="Write a starter config file.")
+    init_parser.add_argument("--output", default="web-to-podcast.yaml", help="Config path to create.")
+    init_parser.add_argument("--name", default="my-resource", help="Project name.")
+    init_parser.add_argument("--url", default="https://example.com/", help="First URL to include.")
+    init_parser.add_argument("--title", default="Example Article", help="First article title.")
+
     args = parser.parse_args(argv)
     if args.command == "doctor":
         print(json.dumps(collect_doctor_report(), ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "init-config":
+        output = Path(args.output)
+        if output.exists():
+            raise SystemExit(f"config already exists: {output}")
+        output.write_text(_starter_config(args.name, args.url, args.title), encoding="utf-8")
+        print(str(output))
         return 0
     if args.command == "run":
         config = load_config(args.config)
@@ -42,6 +56,51 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"manifest": str(manifest_path), "summary": summary}, ensure_ascii=False, indent=2))
         return 0
     return 2
+
+
+def _starter_config(name: str, url: str, title: str) -> str:
+    project_slug = slugify(name, "my-resource")
+    return f"""project:
+  name: {_yaml_string(name)}
+  output_dir: {_yaml_string(f"output/{project_slug}")}
+
+source:
+  renderer: static
+  # Use renderer: playwright for JavaScript-heavy pages.
+  # content_selector: article
+  # title_selector: h1
+  # remove_selectors: ["nav", "footer", ".sidebar"]
+  urls:
+    - url: {_yaml_string(url)}
+      title: {_yaml_string(title)}
+      section: "1. Articles"
+      order: 1
+
+translation:
+  enabled: true
+  provider: ollama
+  model: gemma4:31b
+  target_language: zh
+  chunk_chars: 2800
+
+tts:
+  enabled: true
+  provider: vibevoice
+  voice_sample: ""
+  device: mps
+  isolate_process: true
+  sample_audio_leak_policy: trim
+  sample_text_leak_policy: off
+
+output:
+  naming: official-title
+  audio_format: m4a
+  bitrate: 128k
+"""
+
+
+def _yaml_string(value: str) -> str:
+    return json.dumps(str(value), ensure_ascii=False)
 
 
 if __name__ == "__main__":

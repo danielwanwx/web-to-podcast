@@ -33,6 +33,16 @@ Run the offline smoke sample without translation or TTS:
 web-to-podcast run --config examples/local_markdown.json
 ```
 
+Create a starter config for your own resource:
+
+```bash
+web-to-podcast init-config \
+  --output my-resource.yaml \
+  --name my-resource \
+  --url https://example.com/article \
+  --title "Article Title"
+```
+
 Run with Ollama translation and VibeVoice audio:
 
 ```bash
@@ -46,6 +56,13 @@ Enable optional ASR-based sample text leakage checks only when needed:
 
 ```bash
 pip install -e ".[asr]"
+```
+
+Enable browser rendering for JavaScript-heavy pages only when needed:
+
+```bash
+pip install -e ".[browser]"
+python -m playwright install chromium
 ```
 
 ## Requirements
@@ -83,6 +100,13 @@ project:
   output_dir: output/my-resource
 
 source:
+  renderer: static
+  # Use renderer: playwright for JavaScript-heavy pages.
+  # renderer: auto tries Playwright first, then falls back to static.
+  content_selector: ""
+  title_selector: ""
+  remove_selectors: []
+  max_scrolls: 0
   urls:
     - url: https://example.com/article-1
       title: Article 1
@@ -123,7 +147,46 @@ output:
 The pipeline writes every phase to disk. If a run stops halfway, rerun the same
 command and completed files are reused. Add `--force` to regenerate.
 
+## JavaScript Pages
+
+For sites where the article is rendered after JavaScript runs, configure the
+browser renderer and narrow extraction to the article body:
+
+```yaml
+source:
+  renderer: playwright
+  wait_until: networkidle
+  content_selector: article
+  title_selector: h1
+  remove_selectors:
+    - nav
+    - footer
+    - .sidebar
+  max_scrolls: 2
+  urls:
+    - url: https://example.com/learn/topic/page
+      title: Topic Page
+      section: "1. Topic"
+      order: 1
+```
+
 ## Notes
 
 Only use this pipeline for resources you are allowed to process. Voice samples
 should be your own voice or voices you have permission to use.
+
+## Publish To GitHub
+
+This directory is a normal git repository. After creating an empty GitHub repo,
+push it with:
+
+```bash
+git remote add origin git@github.com:<owner>/web-to-podcast.git
+git push -u origin main
+```
+
+If GitHub CLI is installed and authenticated:
+
+```bash
+gh repo create web-to-podcast --private --source=. --remote=origin --push
+```

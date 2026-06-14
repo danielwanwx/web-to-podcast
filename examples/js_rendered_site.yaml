@@ -1,0 +1,37 @@
+project:
+  name: js-rendered-demo
+  output_dir: output/js-rendered-demo
+
+source:
+  renderer: playwright
+  wait_until: networkidle
+  content_selector: article
+  title_selector: h1
+  remove_selectors:
+    - nav
+    - footer
+    - .sidebar
+  max_scrolls: 2
+  urls:
+    - url: https://example.com/article
+      title: Article Title
+      section: "1. Articles"
+      order: 1
+
+translation:
+  enabled: true
+  provider: ollama
+  model: gemma4:31b
+  target_language: zh
+
+tts:
+  enabled: true
+  provider: vibevoice
+  voice_sample: ""
+  device: mps
+  isolate_process: true
+
+output:
+  naming: official-title
+  audio_format: m4a
+  bitrate: 128k

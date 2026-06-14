@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -67,6 +68,26 @@ def fetch_url(url: str, *, timeout: int = 30, user_agent: str = "web-to-podcast/
     return body.decode(charset, errors="replace"), content_type
 
 
+def fetch_url_with_renderer(url: str, config: PipelineConfig) -> tuple[str, str]:
+    """Fetch a URL with the configured renderer.
+
+    `static` uses urllib. `playwright` renders JavaScript pages. `auto` tries
+    Playwright first and falls back to static fetching if browser dependencies
+    are not installed or rendering fails.
+    """
+    renderer = (config.source.renderer or "static").lower()
+    if renderer == "static":
+        return fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+    if renderer in {"playwright", "browser", "auto"}:
+        try:
+            return _fetch_url_playwright(url, config), "text/html; rendered=playwright"
+        except Exception:
+            if renderer == "auto":
+                return fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+            raise
+    raise ValueError(f"unsupported source renderer: {config.source.renderer}")
+
+
 def _configured_url_items(config: PipelineConfig) -> list[dict[str, Any]]:
     items = [_normalize_item(item, default_key="url") for item in config.source.urls]
     if config.source.url_file:
@@ -114,11 +135,7 @@ def _crawl_url_items(config: PipelineConfig) -> list[dict[str, Any]]:
         if not _url_allowed(url, crawl.include_patterns, crawl.exclude_patterns):
             continue
         try:
-            html_text, content_type = fetch_url(
-                url,
-                timeout=config.source.timeout_seconds,
-                user_agent=config.source.user_agent,
-            )
+            html_text, content_type = fetch_url_with_renderer(url, config)
         except Exception:
             continue
         items.append({"url": url, "order": len(items) + 1, "_prefetched": html_text, "_content_type": content_type})
@@ -137,11 +154,7 @@ def _load_url_item(item: dict[str, Any], config: PipelineConfig) -> SourceDocume
     raw = str(item.get("_prefetched") or "")
     content_type = str(item.get("_content_type") or "")
     if not raw:
-        raw, content_type = fetch_url(
-            url,
-            timeout=config.source.timeout_seconds,
-            user_agent=config.source.user_agent,
-        )
+        raw, content_type = fetch_url_with_renderer(url, config)
     return SourceDocument.build(
         raw_text=raw,
         title=str(item.get("title") or ""),
@@ -219,6 +232,51 @@ def _extract_links(base_url: str, html_text: str) -> list[str]:
             continue
         links.append(urllib.parse.urlunparse(parsed._replace(fragment="")))
     return links
+
+
+def _fetch_url_playwright(url: str, config: PipelineConfig) -> str:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise RuntimeError("Playwright renderer requested. Install with: pip install -e '.[browser]' && python -m playwright install chromium") from exc
+
+    timeout_ms = max(1, int(config.source.timeout_seconds)) * 1000
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(user_agent=config.source.user_agent)
+        page = context.new_page()
+        try:
+            page.goto(url, wait_until=config.source.wait_until, timeout=timeout_ms)
+            _scroll_page(page, config.source.max_scrolls)
+            for selector in config.source.remove_selectors:
+                page.locator(selector).evaluate_all("(els) => els.forEach((el) => el.remove())")
+            title = ""
+            if config.source.title_selector:
+                locator = page.locator(config.source.title_selector).first
+                if locator.count():
+                    title = locator.inner_text(timeout=timeout_ms).strip()
+            if not title:
+                title = page.title().strip()
+            if config.source.content_selector:
+                locator = page.locator(config.source.content_selector).first
+                if locator.count():
+                    body = locator.evaluate("(el) => el.outerHTML", timeout=timeout_ms)
+                else:
+                    body = page.content()
+            else:
+                body = page.content()
+            if title and "<h1" not in body.lower():
+                body = f"<article><h1>{title}</h1>\n{body}</article>"
+            return body
+        finally:
+            context.close()
+            browser.close()
+
+
+def _scroll_page(page: Any, max_scrolls: int) -> None:
+    for _ in range(max(0, int(max_scrolls))):
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        time.sleep(0.4)
 
 
 def _url_allowed(url: str, include_patterns: list[str], exclude_patterns: list[str]) -> bool:

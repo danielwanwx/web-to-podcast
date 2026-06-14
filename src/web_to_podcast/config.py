@@ -24,6 +24,12 @@ class SourceConfig:
     sitemap_urls: list[str] = field(default_factory=list)
     local_files: list[Any] = field(default_factory=list)
     crawl: CrawlConfig = field(default_factory=CrawlConfig)
+    renderer: str = "static"
+    wait_until: str = "networkidle"
+    content_selector: str = ""
+    title_selector: str = ""
+    remove_selectors: list[str] = field(default_factory=list)
+    max_scrolls: int = 0
     timeout_seconds: int = 30
     user_agent: str = "web-to-podcast/0.1"
 
@@ -137,6 +143,12 @@ def _source_config(data: dict[str, Any]) -> SourceConfig:
             include_patterns=[str(item) for item in coerce_list(crawl_data.get("include_patterns"))],
             exclude_patterns=[str(item) for item in coerce_list(crawl_data.get("exclude_patterns"))],
         ),
+        renderer=str(data.get("renderer") or "static"),
+        wait_until=str(data.get("wait_until") or "networkidle"),
+        content_selector=str(data.get("content_selector") or ""),
+        title_selector=str(data.get("title_selector") or ""),
+        remove_selectors=[str(item) for item in coerce_list(data.get("remove_selectors"))],
+        max_scrolls=int(data.get("max_scrolls") or 0),
         timeout_seconds=int(data.get("timeout_seconds") or 30),
         user_agent=str(data.get("user_agent") or "web-to-podcast/0.1"),
     )

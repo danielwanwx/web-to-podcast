@@ -14,6 +14,7 @@ setup(
     extras_require={
         "tts": ["numpy>=1.24", "soundfile>=0.12", "torch>=2.2"],
         "asr": ["openai-whisper>=20231117"],
+        "browser": ["playwright>=1.45"],
         "dev": ["pytest>=8.0"],
     },
     entry_points={"console_scripts": ["web-to-podcast=web_to_podcast.cli:main"]},

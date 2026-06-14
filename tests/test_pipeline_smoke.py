@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from web_to_podcast.config import load_config
+from web_to_podcast.cli import main as cli_main
 from web_to_podcast.extract import extract_readable_text
 from web_to_podcast.pipeline import run_pipeline
 from web_to_podcast.segments import split_tts_segment_specs
@@ -58,6 +59,15 @@ class PipelineSmokeTest(unittest.TestCase):
             self.assertTrue((out / "04_tts_script").exists())
             self.assertEqual(manifest["summary"]["documents"], 1)
             self.assertEqual(manifest["summary"]["audio_completed"], 0)
+
+    def test_init_config_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "starter.yaml"
+            exit_code = cli_main(["init-config", "--output", str(config_path), "--name", "starter", "--url", "https://example.com/a", "--title", "A"])
+            self.assertEqual(exit_code, 0)
+            cfg = load_config(config_path)
+            self.assertEqual(cfg.project.name, "starter")
+            self.assertEqual(cfg.source.urls[0]["url"], "https://example.com/a")
 
 
 if __name__ == "__main__":
