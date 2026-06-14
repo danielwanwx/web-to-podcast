@@ -31,6 +31,7 @@ Run the offline smoke sample without translation or TTS:
 
 ```bash
 web-to-podcast run --config examples/local_markdown.json
+web-to-podcast status --output-dir output/local-smoke
 ```
 
 Create a starter config for your own resource:
@@ -146,6 +147,23 @@ output:
 
 The pipeline writes every phase to disk. If a run stops halfway, rerun the same
 command and completed files are reused. Add `--force` to regenerate.
+
+## Run Status
+
+Inspect a run directory at any time:
+
+```bash
+web-to-podcast status --output-dir output/my-resource
+```
+
+For production audio jobs, require every document to have a final audio file:
+
+```bash
+web-to-podcast status --output-dir output/my-resource --expect-audio
+```
+
+The status report checks `manifest.json`, each stage file, segment manifests,
+failed or pending TTS chunks, and final audio paths.
 
 ## JavaScript Pages
 

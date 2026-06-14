@@ -11,6 +11,7 @@ from web_to_podcast.extract import extract_readable_text
 from web_to_podcast.pipeline import run_pipeline
 from web_to_podcast.segments import split_tts_segment_specs
 from web_to_podcast.sources import collect_sources
+from web_to_podcast.status import inspect_run
 from web_to_podcast.document import SourceDocument
 import web_to_podcast.sources as sources_module
 
@@ -62,6 +63,12 @@ class PipelineSmokeTest(unittest.TestCase):
             self.assertTrue((out / "04_tts_script").exists())
             self.assertEqual(manifest["summary"]["documents"], 1)
             self.assertEqual(manifest["summary"]["audio_completed"], 0)
+            status = inspect_run(out)
+            self.assertTrue(status["ok"])
+            strict_status = inspect_run(out, expect_audio=True)
+            self.assertFalse(strict_status["ok"])
+            self.assertEqual(cli_main(["status", "--output-dir", str(out)]), 0)
+            self.assertEqual(cli_main(["status", "--output-dir", str(out), "--expect-audio"]), 1)
 
     def test_init_config_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

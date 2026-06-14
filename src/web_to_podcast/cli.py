@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import load_config
 from .doctor import collect_doctor_report
 from .pipeline import run_pipeline
+from .status import inspect_run
 from .utils import slugify
 
 
@@ -23,6 +24,10 @@ def main(argv: list[str] | None = None) -> int:
 
     subparsers.add_parser("doctor", help="Check local runtime dependencies.")
 
+    status_parser = subparsers.add_parser("status", help="Inspect a run output directory.")
+    status_parser.add_argument("--output-dir", required=True, help="Pipeline output directory containing manifest.json.")
+    status_parser.add_argument("--expect-audio", action="store_true", help="Fail if final audio is missing or skipped.")
+
     init_parser = subparsers.add_parser("init-config", help="Write a starter config file.")
     init_parser.add_argument("--output", default="web-to-podcast.yaml", help="Config path to create.")
     init_parser.add_argument("--name", default="my-resource", help="Project name.")
@@ -33,6 +38,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         print(json.dumps(collect_doctor_report(), ensure_ascii=False, indent=2))
         return 0
+    if args.command == "status":
+        report = inspect_run(args.output_dir, expect_audio=args.expect_audio)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report.get("ok") else 1
     if args.command == "init-config":
         output = Path(args.output)
         if output.exists():
