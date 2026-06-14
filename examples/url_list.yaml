@@ -1,0 +1,36 @@
+project:
+  name: web-resource-demo
+  output_dir: output/web-resource-demo
+
+source:
+  urls:
+    - url: https://example.com/
+      title: Example Domain
+      section: "1. Demo"
+      order: 1
+
+translation:
+  enabled: true
+  provider: ollama
+  model: gemma4:31b
+  target_language: zh
+  chunk_chars: 2800
+  timeout_seconds: 900
+
+tts:
+  enabled: true
+  provider: vibevoice
+  device: mps
+  voice_sample: ""
+  isolate_process: true
+  inference_steps: 5
+  cfg_scale: 1.5
+  max_new_tokens: 220
+  max_length_times: 1.2
+  sample_audio_leak_policy: trim
+  sample_text_leak_policy: off
+
+output:
+  naming: official-title
+  audio_format: m4a
+  bitrate: 128k

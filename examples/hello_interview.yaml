@@ -1,0 +1,42 @@
+project:
+  name: hello-interview-demo
+  output_dir: output/hello-interview-demo
+
+source:
+  urls:
+    - url: https://www.hellointerview.com/learn/system-design/in-a-hurry/introduction
+      title: Introduction
+      section: "1. System Design/1. In a Hurry"
+      order: 1
+    - url: https://www.hellointerview.com/learn/system-design/in-a-hurry/how-to-prepare
+      title: How to Prepare
+      section: "1. System Design/1. In a Hurry"
+      order: 2
+    - url: https://www.hellointerview.com/learn/system-design/core-concepts/networking-essentials
+      title: Networking Essentials
+      section: "1. System Design/2. Core Concepts"
+      order: 1
+    - url: https://www.hellointerview.com/learn/system-design/core-concepts/api-design
+      title: API Design
+      section: "1. System Design/2. Core Concepts"
+      order: 2
+
+translation:
+  enabled: true
+  provider: ollama
+  model: gemma4:31b
+  target_language: zh
+
+tts:
+  enabled: true
+  provider: vibevoice
+  voice_sample: ""
+  device: mps
+  isolate_process: true
+  sample_audio_leak_policy: trim
+  sample_text_leak_policy: off
+
+output:
+  naming: official-title
+  audio_format: m4a
+  bitrate: 128k

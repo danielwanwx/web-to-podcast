@@ -1,0 +1,26 @@
+{
+  "project": {
+    "name": "local-smoke",
+    "output_dir": "output/local-smoke"
+  },
+  "source": {
+    "local_files": [
+      {
+        "path": "examples/sample_article.md",
+        "title": "Sample Article",
+        "section": "1. Demo",
+        "order": 1
+      }
+    ]
+  },
+  "translation": {
+    "enabled": false
+  },
+  "tts": {
+    "enabled": false,
+    "provider": "none"
+  },
+  "output": {
+    "naming": "official-title"
+  }
+}

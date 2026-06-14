@@ -1,0 +1,26 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Local runs can contain copyrighted pages, translations, voice samples,
+# generated segments, and large audio files. Keep them out of git by default.
+output/
+runs/
+tmp/
+cache/
+*.wav
+*.m4a
+*.mp3
+*.mp4
+*.mov
+*.flac
+
+!examples/**
