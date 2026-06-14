@@ -4,6 +4,7 @@ project:
 
 source:
   renderer: playwright
+  extractor: auto
   wait_until: networkidle
   storage_state: ""
   headers:

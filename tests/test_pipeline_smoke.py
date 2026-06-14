@@ -32,6 +32,16 @@ class PipelineSmokeTest(unittest.TestCase):
         self.assertNotIn("x()", text)
         self.assertNotIn("Ignore", text)
 
+    def test_auto_extractor_falls_back_to_basic(self) -> None:
+        doc = SourceDocument.build(
+            raw_text="<html><body><article><h1>Auto Title</h1><p>Body text.</p></article></body></html>",
+            source_url="https://example.com/auto",
+            media_type="text/html",
+        )
+        title, text = extract_readable_text(doc, extractor="auto")
+        self.assertEqual(title, "Auto Title")
+        self.assertIn("Body text.", text)
+
     def test_segments_include_pause_metadata(self) -> None:
         segments = split_tts_segment_specs("Title\n\nThis is one sentence. This is another sentence.", target_chars=30, max_chars=60)
         self.assertGreaterEqual(len(segments), 2)
@@ -135,6 +145,23 @@ class PipelineSmokeTest(unittest.TestCase):
             self.assertEqual(cfg.source.request_delay_seconds, 0.25)
             report = collect_doctor_report(str(config_path), strict=True)
             self.assertTrue(report["checks"]["storage_state_exists"]["ok"])
+
+    def test_doctor_reports_trafilatura_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"output_dir": str(Path(tmp) / "out")},
+                        "source": {"extractor": "trafilatura"},
+                        "translation": {"enabled": False},
+                        "tts": {"enabled": False, "provider": "none"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            report = collect_doctor_report(str(config_path), strict=True)
+            self.assertIn("trafilatura_importable", report["checks"])
 
     def test_fetch_url_sends_custom_headers(self) -> None:
         recorded: dict[str, str] = {}

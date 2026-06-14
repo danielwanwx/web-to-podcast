@@ -83,7 +83,7 @@ def _process_document(
     if _stop_at(to_phase, "source"):
         return entry
 
-    title, clean_text = extract_readable_text(doc)
+    title, clean_text = extract_readable_text(doc, extractor=config.source.extractor)
     if title and title != doc.title:
         doc.title = title
         entry["title"] = doc.title

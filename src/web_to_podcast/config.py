@@ -25,6 +25,7 @@ class SourceConfig:
     local_files: list[Any] = field(default_factory=list)
     crawl: CrawlConfig = field(default_factory=CrawlConfig)
     renderer: str = "static"
+    extractor: str = "basic"
     wait_until: str = "networkidle"
     content_selector: str = ""
     title_selector: str = ""
@@ -147,6 +148,7 @@ def _source_config(data: dict[str, Any]) -> SourceConfig:
             exclude_patterns=[str(item) for item in coerce_list(crawl_data.get("exclude_patterns"))],
         ),
         renderer=str(data.get("renderer") or "static"),
+        extractor=str(data.get("extractor") or "basic"),
         wait_until=str(data.get("wait_until") or "networkidle"),
         content_selector=str(data.get("content_selector") or ""),
         title_selector=str(data.get("title_selector") or ""),

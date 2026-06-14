@@ -2,13 +2,16 @@ PYTHON ?= python3
 VENV ?= .venv
 CLI := $(VENV)/bin/web-to-podcast
 
-.PHONY: bootstrap bootstrap-browser test doctor smoke clean publish
+.PHONY: bootstrap bootstrap-browser bootstrap-extract test doctor smoke clean publish
 
 bootstrap:
 	PYTHON=$(PYTHON) WEB_TO_PODCAST_VENV=$(VENV) scripts/bootstrap.sh
 
 bootstrap-browser:
 	PYTHON=$(PYTHON) WEB_TO_PODCAST_VENV=$(VENV) scripts/bootstrap.sh --browser
+
+bootstrap-extract:
+	PYTHON=$(PYTHON) WEB_TO_PODCAST_VENV=$(VENV) scripts/bootstrap.sh --extract
 
 test:
 	PYTHONPATH=src $(PYTHON) -m pytest -q

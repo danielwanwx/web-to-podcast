@@ -26,6 +26,7 @@ Every stage is file-backed and resumable:
 ## Extension Points
 
 - Add new source providers under `web_to_podcast/sources.py`.
+- Add extraction backends under `web_to_podcast/extract.py`.
 - Add translator providers under `web_to_podcast/translate.py`.
 - Add TTS providers under `web_to_podcast/tts.py`.
 - Add site-specific ordering by supplying `title`, `section`, and `order` in

@@ -105,17 +105,53 @@ class _ReadableHTMLParser(HTMLParser):
         return h1 or title
 
 
-def extract_readable_text(document: SourceDocument) -> tuple[str, str]:
+def extract_readable_text(document: SourceDocument, *, extractor: str = "basic") -> tuple[str, str]:
     """Return `(title, text)` for a source document."""
     media_type = (document.media_type or "").lower()
     raw = document.raw_text or ""
     if "html" in media_type or _looks_like_html(raw):
+        extracted = _extract_html_with_backend(raw, extractor)
+        if extracted:
+            extracted_title, extracted_text = extracted
+            title = document.title if document.title and document.title != "Untitled" else extracted_title
+            return title or document.title or "Untitled", extracted_text
         parser = _ReadableHTMLParser()
         parser.feed(raw)
         parser.close()
         title = document.title if document.title and document.title != "Untitled" else parser.title
         return title or document.title or "Untitled", parser.text
     return document.title, clean_source_text(raw)
+
+
+def _extract_html_with_backend(raw: str, extractor: str) -> tuple[str, str] | None:
+    backend = (extractor or "basic").strip().lower()
+    if backend == "basic":
+        return None
+    if backend not in {"auto", "trafilatura"}:
+        raise ValueError("source.extractor must be one of: basic, auto, trafilatura")
+    try:
+        import trafilatura
+    except ImportError as exc:
+        if backend == "auto":
+            return None
+        raise RuntimeError("trafilatura extractor requested. Install with: pip install -e '.[extract]'") from exc
+
+    text = trafilatura.extract(
+        raw,
+        output_format="txt",
+        include_comments=False,
+        include_tables=True,
+        favor_precision=False,
+    )
+    if not text or not text.strip():
+        return None
+    title = ""
+    try:
+        metadata = trafilatura.extract_metadata(raw)
+        title = str(getattr(metadata, "title", "") or "").strip()
+    except Exception:
+        title = ""
+    return title, _collapse_text(text)
 
 
 def clean_source_text(raw_text: str) -> str:

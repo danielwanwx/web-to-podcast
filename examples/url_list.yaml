@@ -3,6 +3,7 @@ project:
   output_dir: output/web-resource-demo
 
 source:
+  extractor: auto
   urls:
     - url: https://example.com/
       title: Example Domain

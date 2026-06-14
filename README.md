@@ -67,10 +67,17 @@ pip install -e ".[browser]"
 python -m playwright install chromium
 ```
 
+Enable stronger automatic article extraction only when needed:
+
+```bash
+pip install -e ".[extract]"
+```
+
 The bootstrap script has matching flags:
 
 ```bash
 scripts/bootstrap.sh --browser
+scripts/bootstrap.sh --extract
 scripts/bootstrap.sh --tts
 scripts/bootstrap.sh --asr
 ```
@@ -102,6 +109,7 @@ the voice sample file.
 ```bash
 make bootstrap          # create .venv, install dev deps, run doctor and smoke
 make bootstrap-browser  # also install Playwright Chromium
+make bootstrap-extract  # also install trafilatura extraction support
 make test
 make doctor
 make smoke
@@ -136,6 +144,8 @@ source:
   renderer: static
   # Use renderer: playwright for JavaScript-heavy pages.
   # renderer: auto tries Playwright first, then falls back to static.
+  extractor: basic
+  # Use extractor: auto to try trafilatura when installed, then fallback.
   headers: {}
   storage_state: ""
   request_delay_seconds: 0
@@ -247,6 +257,28 @@ source:
 that require a logged-in browser session. Do not commit auth state files. See
 [docs/authenticated-sites.md](docs/authenticated-sites.md) for a short setup
 guide.
+
+## Automatic Article Extraction
+
+The built-in `basic` extractor is dependency-free and works well when you
+configure `content_selector`. For unknown sites, install the optional extractor
+and use `auto`:
+
+```bash
+pip install -e ".[extract]"
+```
+
+```yaml
+source:
+  extractor: auto
+  urls:
+    - url: https://example.com/article
+      title: Article
+      order: 1
+```
+
+`auto` tries `trafilatura` first and falls back to the built-in extractor.
+Use `extractor: trafilatura` if you want missing trafilatura to fail loudly.
 
 ## Notes
 

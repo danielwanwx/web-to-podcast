@@ -110,6 +110,11 @@ def _add_config_checks(report: dict[str, Any], config: PipelineConfig) -> None:
             f"Playwright storage state exists: {storage_state_path}",
             f"Playwright storage state file does not exist: {storage_state_path}",
         )
+    extractor = (config.source.extractor or "basic").lower()
+    if extractor == "trafilatura":
+        _record_check(report, "trafilatura_importable", importlib.util.find_spec("trafilatura") is not None, "trafilatura package is importable", "trafilatura extractor requested but package is not installed")
+    elif extractor == "auto":
+        _record_check(report, "trafilatura_importable_optional", True, "auto extractor can fall back to the built-in parser")
 
     if config.translation.enabled and config.translation.provider == "ollama":
         _record_check(report, "ollama_cli", bool(report["ollama_cli"]), "Ollama CLI is available", "Ollama CLI is required for local Gemma translation")

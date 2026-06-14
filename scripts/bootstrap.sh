@@ -4,13 +4,14 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/bootstrap.sh [--browser] [--tts] [--asr] [--all] [--no-smoke]
+  scripts/bootstrap.sh [--browser] [--extract] [--tts] [--asr] [--all] [--no-smoke]
 
 Default setup is intentionally light: dev dependencies only, then doctor and
 offline smoke run. Heavy model/audio dependencies are opt-in.
 
 Options:
   --browser   Install Playwright extra and Chromium browser.
+  --extract   Install trafilatura for automatic article extraction.
   --tts       Install TTS extra dependencies used by VibeVoice integration.
   --asr       Install Whisper ASR extra used by optional sample text leak checks.
   --all       Install browser, tts, and asr extras.
@@ -25,6 +26,7 @@ EOF
 python_bin="${PYTHON:-python3}"
 venv_dir="${WEB_TO_PODCAST_VENV:-.venv}"
 install_browser=0
+install_extract=0
 install_tts=0
 install_asr=0
 run_smoke=1
@@ -34,6 +36,9 @@ while [[ $# -gt 0 ]]; do
     --browser)
       install_browser=1
       ;;
+    --extract)
+      install_extract=1
+      ;;
     --tts)
       install_tts=1
       ;;
@@ -42,6 +47,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --all)
       install_browser=1
+      install_extract=1
       install_tts=1
       install_asr=1
       ;;
@@ -74,6 +80,9 @@ venv_cli="$venv_dir/bin/web-to-podcast"
 extras=(dev)
 if [[ "$install_browser" == "1" ]]; then
   extras+=(browser)
+fi
+if [[ "$install_extract" == "1" ]]; then
+  extras+=(extract)
 fi
 if [[ "$install_tts" == "1" ]]; then
   extras+=(tts)
