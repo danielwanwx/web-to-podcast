@@ -20,11 +20,8 @@ configuration profile.
 ```bash
 git clone <your-repo-url> web-to-podcast
 cd web-to-podcast
-python3 -m venv .venv
+scripts/bootstrap.sh
 source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-pip install -e ".[dev]"
-web-to-podcast doctor
 ```
 
 Run the offline smoke sample without translation or TTS:
@@ -66,6 +63,14 @@ pip install -e ".[browser]"
 python -m playwright install chromium
 ```
 
+The bootstrap script has matching flags:
+
+```bash
+scripts/bootstrap.sh --browser
+scripts/bootstrap.sh --tts
+scripts/bootstrap.sh --asr
+```
+
 ## Requirements
 
 - Python 3.9 or newer.
@@ -75,6 +80,17 @@ python -m playwright install chromium
 
 The default translation model is `gemma4:31b`. Change it in the config if your
 local model name differs.
+
+## Make Targets
+
+```bash
+make bootstrap          # create .venv, install dev deps, run doctor and smoke
+make bootstrap-browser  # also install Playwright Chromium
+make test
+make doctor
+make smoke
+make clean
+```
 
 ## Output Layout
 

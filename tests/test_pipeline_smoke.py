@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -78,6 +79,13 @@ class PipelineSmokeTest(unittest.TestCase):
             cfg = load_config(config_path)
             self.assertEqual(cfg.project.name, "starter")
             self.assertEqual(cfg.source.urls[0]["url"], "https://example.com/a")
+
+    def test_helper_scripts_are_executable(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        for script in ["scripts/bootstrap.sh", "scripts/publish_github.sh"]:
+            path = root / script
+            self.assertTrue(path.exists(), script)
+            self.assertTrue(os.access(path, os.X_OK), script)
 
     def test_phase_limited_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
