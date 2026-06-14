@@ -185,8 +185,14 @@ git remote add origin git@github.com:<owner>/web-to-podcast.git
 git push -u origin main
 ```
 
+Or use the helper:
+
+```bash
+scripts/publish_github.sh git@github.com:<owner>/web-to-podcast.git
+```
+
 If GitHub CLI is installed and authenticated:
 
 ```bash
-gh repo create web-to-podcast --private --source=. --remote=origin --push
+scripts/publish_github.sh --gh <owner>/web-to-podcast --private
 ```

@@ -10,7 +10,9 @@ from web_to_podcast.cli import main as cli_main
 from web_to_podcast.extract import extract_readable_text
 from web_to_podcast.pipeline import run_pipeline
 from web_to_podcast.segments import split_tts_segment_specs
+from web_to_podcast.sources import collect_sources
 from web_to_podcast.document import SourceDocument
+import web_to_podcast.sources as sources_module
 
 
 class PipelineSmokeTest(unittest.TestCase):
@@ -24,6 +26,7 @@ class PipelineSmokeTest(unittest.TestCase):
         self.assertEqual(title, "Hello")
         self.assertIn("Readable text.", text)
         self.assertNotIn("x()", text)
+        self.assertNotIn("Ignore", text)
 
     def test_segments_include_pause_metadata(self) -> None:
         segments = split_tts_segment_specs("Title\n\nThis is one sentence. This is another sentence.", target_chars=30, max_chars=60)
@@ -68,6 +71,49 @@ class PipelineSmokeTest(unittest.TestCase):
             cfg = load_config(config_path)
             self.assertEqual(cfg.project.name, "starter")
             self.assertEqual(cfg.source.urls[0]["url"], "https://example.com/a")
+
+    def test_static_html_selector_filters(self) -> None:
+        html = """
+        <html>
+          <head><title>Page Title</title></head>
+          <body>
+            <nav>Navigation</nav>
+            <main id="content"><h1>Article Title</h1><p>Keep me.</p><aside>Drop me.</aside></main>
+            <footer>Footer</footer>
+          </body>
+        </html>
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"output_dir": str(Path(tmp) / "out")},
+                        "source": {
+                            "content_selector": "#content",
+                            "remove_selectors": ["aside"],
+                            "urls": [{"url": "https://example.com/article", "order": 1}],
+                        },
+                        "translation": {"enabled": False},
+                        "tts": {"enabled": False, "provider": "none"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+            original_fetch = sources_module.fetch_url
+            sources_module.fetch_url = lambda *args, **kwargs: (html, "text/html")
+            try:
+                docs = collect_sources(config)
+            finally:
+                sources_module.fetch_url = original_fetch
+            self.assertEqual(len(docs), 1)
+            title, text = extract_readable_text(docs[0])
+            self.assertEqual(title, "Article Title")
+            self.assertIn("Keep me.", text)
+            self.assertNotIn("Navigation", text)
+            self.assertNotIn("Drop me.", text)
+            self.assertNotIn("Footer", text)
 
 
 if __name__ == "__main__":

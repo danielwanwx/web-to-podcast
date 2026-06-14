@@ -85,6 +85,7 @@ class _ReadableHTMLParser(HTMLParser):
             return
         if self._in_title:
             self.title_parts.append(text)
+            return
         if self._in_h1:
             self.h1_parts.append(text)
         self.parts.append(text)

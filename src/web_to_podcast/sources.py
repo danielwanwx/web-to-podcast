@@ -77,13 +77,15 @@ def fetch_url_with_renderer(url: str, config: PipelineConfig) -> tuple[str, str]
     """
     renderer = (config.source.renderer or "static").lower()
     if renderer == "static":
-        return fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+        raw, content_type = fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+        return _apply_static_html_filters(raw, content_type, config), content_type
     if renderer in {"playwright", "browser", "auto"}:
         try:
             return _fetch_url_playwright(url, config), "text/html; rendered=playwright"
         except Exception:
             if renderer == "auto":
-                return fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+                raw, content_type = fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+                return _apply_static_html_filters(raw, content_type, config), content_type
             raise
     raise ValueError(f"unsupported source renderer: {config.source.renderer}")
 
@@ -232,6 +234,159 @@ def _extract_links(base_url: str, html_text: str) -> list[str]:
             continue
         links.append(urllib.parse.urlunparse(parsed._replace(fragment="")))
     return links
+
+
+class _StaticHTMLFilter(HTMLParser):
+    """Small CSS-lite filter for static HTML extraction.
+
+    It supports selectors that cover most article extraction configs:
+    `article`, `main`, `#id`, `.class`, `tag.class`, and `tag#id`.
+    """
+
+    def __init__(self, *, content_selector: str = "", title_selector: str = "", remove_selectors: list[str] | None = None):
+        super().__init__(convert_charrefs=False)
+        self.content_selector = content_selector.strip()
+        self.title_selector = title_selector.strip()
+        self.remove_selectors = [selector.strip() for selector in (remove_selectors or []) if selector.strip()]
+        self.filtered_parts: list[str] = []
+        self.captured_parts: list[str] = []
+        self.title_parts: list[str] = []
+        self._skip_depth = 0
+        self._capture_depth = 0
+        self._capture_done = False
+        self._title_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        raw = self.get_starttag_text() or _render_start_tag(tag, attrs)
+        if self._skip_depth:
+            self._skip_depth += 1
+            return
+        if any(_selector_matches(tag, attrs, selector) for selector in self.remove_selectors):
+            self._skip_depth = 1
+            return
+        if self.title_selector and _selector_matches(tag, attrs, self.title_selector):
+            self._title_depth = 1
+        elif self._title_depth:
+            self._title_depth += 1
+
+        should_start_capture = bool(self.content_selector and not self._capture_done and _selector_matches(tag, attrs, self.content_selector))
+        if should_start_capture:
+            self._capture_depth = 1
+            self.captured_parts.append(raw)
+            return
+        if self._capture_depth:
+            self._capture_depth += 1
+            self.captured_parts.append(raw)
+            return
+        if not self.content_selector:
+            self.filtered_parts.append(raw)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        raw = self.get_starttag_text() or _render_start_tag(tag, attrs, close=True)
+        if self._skip_depth:
+            return
+        if any(_selector_matches(tag, attrs, selector) for selector in self.remove_selectors):
+            return
+        if self._capture_depth:
+            self.captured_parts.append(raw)
+            return
+        if not self.content_selector:
+            self.filtered_parts.append(raw)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if self._title_depth:
+            self._title_depth -= 1
+        if self._capture_depth:
+            self.captured_parts.append(f"</{tag}>")
+            self._capture_depth -= 1
+            if self._capture_depth == 0:
+                self._capture_done = True
+            return
+        if not self.content_selector:
+            self.filtered_parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        if self._title_depth:
+            self.title_parts.append(data)
+        if self._capture_depth:
+            self.captured_parts.append(data)
+            return
+        if not self.content_selector:
+            self.filtered_parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        self.handle_data(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.handle_data(f"&#{name};")
+
+    def html(self) -> str:
+        body = "".join(self.captured_parts if self.captured_parts else self.filtered_parts)
+        title = re.sub(r"\s+", " ", "".join(self.title_parts)).strip()
+        if title and "<h1" not in body.lower():
+            body = f"<article><h1>{title}</h1>\n{body}</article>"
+        return body
+
+
+def _apply_static_html_filters(raw: str, content_type: str, config: PipelineConfig) -> str:
+    if "html" not in (content_type or "").lower() and "<html" not in raw[:500].lower() and "<article" not in raw[:500].lower():
+        return raw
+    if not (config.source.content_selector or config.source.title_selector or config.source.remove_selectors):
+        return raw
+    parser = _StaticHTMLFilter(
+        content_selector=config.source.content_selector,
+        title_selector=config.source.title_selector,
+        remove_selectors=config.source.remove_selectors,
+    )
+    parser.feed(raw)
+    parser.close()
+    filtered = parser.html().strip()
+    return filtered or raw
+
+
+def _selector_matches(tag: str, attrs: list[tuple[str, str | None]], selector: str) -> bool:
+    selector = selector.strip()
+    if not selector:
+        return False
+    if "," in selector:
+        return any(_selector_matches(tag, attrs, part) for part in selector.split(","))
+    if any(char in selector for char in " >+~[]:"):
+        return False
+    attr_map = {key.lower(): value or "" for key, value in attrs}
+    tag = tag.lower()
+    expected_tag = ""
+    expected_id = ""
+    expected_class = ""
+    if selector.startswith("#"):
+        expected_id = selector[1:]
+    elif selector.startswith("."):
+        expected_class = selector[1:]
+    elif "#" in selector:
+        expected_tag, expected_id = selector.split("#", 1)
+    elif "." in selector:
+        expected_tag, expected_class = selector.split(".", 1)
+    else:
+        expected_tag = selector
+    if expected_tag and tag != expected_tag.lower():
+        return False
+    if expected_id and attr_map.get("id") != expected_id:
+        return False
+    if expected_class:
+        classes = set(re.split(r"\s+", attr_map.get("class", "").strip()))
+        if expected_class not in classes:
+            return False
+    return True
+
+
+def _render_start_tag(tag: str, attrs: list[tuple[str, str | None]], close: bool = False) -> str:
+    rendered_attrs = "".join(f' {key}="{value}"' if value is not None else f" {key}" for key, value in attrs)
+    suffix = " /" if close else ""
+    return f"<{tag}{rendered_attrs}{suffix}>"
 
 
 def _fetch_url_playwright(url: str, config: PipelineConfig) -> str:
