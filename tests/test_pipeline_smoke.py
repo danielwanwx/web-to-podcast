@@ -13,6 +13,7 @@ from web_to_podcast.extract import extract_readable_text
 from web_to_podcast.pipeline import run_pipeline
 from web_to_podcast.segments import split_tts_segment_specs
 from web_to_podcast.sources import collect_sources
+from web_to_podcast.sources import fetch_url
 from web_to_podcast.status import inspect_run
 from web_to_podcast.document import SourceDocument
 import web_to_podcast.sources as sources_module
@@ -107,6 +108,72 @@ class PipelineSmokeTest(unittest.TestCase):
             self.assertIn("checks", report)
             self.assertTrue(any(issue["check"] in {"ollama_model", "voice_sample_exists"} for issue in report["issues"]))
             self.assertEqual(cli_main(["doctor", "--config", str(config_path), "--strict"]), 1)
+
+    def test_config_parses_auth_and_rate_limit_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            storage_state = Path(tmp) / "state.json"
+            storage_state.write_text("{}", encoding="utf-8")
+            config_path = Path(tmp) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"output_dir": str(Path(tmp) / "out")},
+                        "source": {
+                            "headers": {"Authorization": "Bearer token"},
+                            "storage_state": str(storage_state),
+                            "request_delay_seconds": 0.25,
+                        },
+                        "translation": {"enabled": False},
+                        "tts": {"enabled": False, "provider": "none"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            cfg = load_config(config_path)
+            self.assertEqual(cfg.source.headers["Authorization"], "Bearer token")
+            self.assertEqual(cfg.source.storage_state, str(storage_state))
+            self.assertEqual(cfg.source.request_delay_seconds, 0.25)
+            report = collect_doctor_report(str(config_path), strict=True)
+            self.assertTrue(report["checks"]["storage_state_exists"]["ok"])
+
+    def test_fetch_url_sends_custom_headers(self) -> None:
+        recorded: dict[str, str] = {}
+
+        class Headers(dict):
+            def get_content_charset(self):
+                return "utf-8"
+
+        class Response:
+            headers = Headers({"content-type": "text/html"})
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"<html>ok</html>"
+
+        def fake_urlopen(request, timeout=0):
+            for key, value in request.header_items():
+                recorded[key.lower()] = value
+            return Response()
+
+        original_urlopen = sources_module.urllib.request.urlopen
+        sources_module.urllib.request.urlopen = fake_urlopen
+        try:
+            text, content_type = fetch_url(
+                "https://example.com",
+                user_agent="CustomAgent",
+                headers={"Authorization": "Bearer token"},
+            )
+        finally:
+            sources_module.urllib.request.urlopen = original_urlopen
+        self.assertIn("ok", text)
+        self.assertEqual(content_type, "text/html")
+        self.assertEqual(recorded["authorization"], "Bearer token")
+        self.assertEqual(recorded["user-agent"], "CustomAgent")
 
     def test_phase_limited_runs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

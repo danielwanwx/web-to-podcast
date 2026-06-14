@@ -101,6 +101,15 @@ def _add_config_checks(report: dict[str, Any], config: PipelineConfig) -> None:
         _record_check(report, "playwright_importable", bool(report["playwright_importable"]), "Playwright package is importable", "Playwright renderer requested but playwright is not installed")
     elif renderer == "auto":
         _record_check(report, "playwright_importable_optional", True, "auto renderer can fall back to static fetching")
+    if config.source.storage_state:
+        storage_state_path = _config_relative_path(config.source.storage_state, config)
+        _record_check(
+            report,
+            "storage_state_exists",
+            storage_state_path.exists(),
+            f"Playwright storage state exists: {storage_state_path}",
+            f"Playwright storage state file does not exist: {storage_state_path}",
+        )
 
     if config.translation.enabled and config.translation.provider == "ollama":
         _record_check(report, "ollama_cli", bool(report["ollama_cli"]), "Ollama CLI is available", "Ollama CLI is required for local Gemma translation")
@@ -138,3 +147,12 @@ def _vibevoice_model_available(model_path: str) -> bool:
     if "/" in model_path and not model_path.startswith(("/", "~", ".")):
         return False
     return Path(os.path.expanduser(model_path)).exists()
+
+
+def _config_relative_path(value: str, config: PipelineConfig) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    if config.config_path:
+        return config.config_path.parent / path
+    return path

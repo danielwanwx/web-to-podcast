@@ -136,6 +136,9 @@ source:
   renderer: static
   # Use renderer: playwright for JavaScript-heavy pages.
   # renderer: auto tries Playwright first, then falls back to static.
+  headers: {}
+  storage_state: ""
+  request_delay_seconds: 0
   content_selector: ""
   title_selector: ""
   remove_selectors: []
@@ -222,6 +225,10 @@ browser renderer and narrow extraction to the article body:
 source:
   renderer: playwright
   wait_until: networkidle
+  storage_state: auth/state.json
+  headers:
+    Accept-Language: en-US,en;q=0.9
+  request_delay_seconds: 0.5
   content_selector: article
   title_selector: h1
   remove_selectors:
@@ -235,6 +242,11 @@ source:
       section: "1. Topic"
       order: 1
 ```
+
+`storage_state` is a Playwright storage-state JSON file. It is useful for pages
+that require a logged-in browser session. Do not commit auth state files. See
+[docs/authenticated-sites.md](docs/authenticated-sites.md) for a short setup
+guide.
 
 ## Notes
 

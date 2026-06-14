@@ -1,11 +1,11 @@
 project:
-  name: js-rendered-demo
-  output_dir: output/js-rendered-demo
+  name: protected-site-demo
+  output_dir: output/protected-site-demo
 
 source:
   renderer: playwright
   wait_until: networkidle
-  storage_state: ""
+  storage_state: ../auth/storage-state.json
   headers:
     Accept-Language: en-US,en;q=0.9
   request_delay_seconds: 0.5
@@ -14,12 +14,10 @@ source:
   remove_selectors:
     - nav
     - footer
-    - .sidebar
-  max_scrolls: 2
   urls:
-    - url: https://example.com/article
-      title: Article Title
-      section: "1. Articles"
+    - url: https://example.com/private/article
+      title: Private Article
+      section: "1. Protected"
       order: 1
 
 translation:

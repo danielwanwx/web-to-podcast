@@ -16,6 +16,8 @@ output/
 runs/
 tmp/
 cache/
+auth/
+*.storage-state.json
 *.wav
 *.m4a
 *.mp3

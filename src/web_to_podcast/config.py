@@ -30,6 +30,9 @@ class SourceConfig:
     title_selector: str = ""
     remove_selectors: list[str] = field(default_factory=list)
     max_scrolls: int = 0
+    headers: dict[str, str] = field(default_factory=dict)
+    storage_state: str = ""
+    request_delay_seconds: float = 0.0
     timeout_seconds: int = 30
     user_agent: str = "web-to-podcast/0.1"
 
@@ -149,9 +152,18 @@ def _source_config(data: dict[str, Any]) -> SourceConfig:
         title_selector=str(data.get("title_selector") or ""),
         remove_selectors=[str(item) for item in coerce_list(data.get("remove_selectors"))],
         max_scrolls=int(data.get("max_scrolls") or 0),
+        headers=_string_mapping(data.get("headers") or {}),
+        storage_state=str(data.get("storage_state") or ""),
+        request_delay_seconds=float(data.get("request_delay_seconds") or 0),
         timeout_seconds=int(data.get("timeout_seconds") or 30),
         user_agent=str(data.get("user_agent") or "web-to-podcast/0.1"),
     )
+
+
+def _string_mapping(data: Any) -> dict[str, str]:
+    if not isinstance(data, dict):
+        return {}
+    return {str(key): str(value) for key, value in data.items()}
 
 
 def _translation_config(data: dict[str, Any]) -> TranslationConfig:

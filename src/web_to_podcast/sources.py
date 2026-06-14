@@ -59,8 +59,15 @@ def collect_sources(config: PipelineConfig) -> list[SourceDocument]:
     return sorted(docs, key=lambda doc: (doc.section, doc.order if doc.order is not None else 999999, doc.title))
 
 
-def fetch_url(url: str, *, timeout: int = 30, user_agent: str = "web-to-podcast/0.1") -> tuple[str, str]:
-    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+def fetch_url(
+    url: str,
+    *,
+    timeout: int = 30,
+    user_agent: str = "web-to-podcast/0.1",
+    headers: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    request_headers = _request_headers(user_agent, headers or {})
+    req = urllib.request.Request(url, headers=request_headers)
     with urllib.request.urlopen(req, timeout=timeout) as response:
         content_type = response.headers.get("content-type", "")
         charset = response.headers.get_content_charset() or "utf-8"
@@ -77,14 +84,28 @@ def fetch_url_with_renderer(url: str, config: PipelineConfig) -> tuple[str, str]
     """
     renderer = (config.source.renderer or "static").lower()
     if renderer == "static":
-        raw, content_type = fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+        raw, content_type = fetch_url(
+            url,
+            timeout=config.source.timeout_seconds,
+            user_agent=config.source.user_agent,
+            headers=config.source.headers,
+        )
+        _respect_request_delay(config)
         return _apply_static_html_filters(raw, content_type, config), content_type
     if renderer in {"playwright", "browser", "auto"}:
         try:
-            return _fetch_url_playwright(url, config), "text/html; rendered=playwright"
+            rendered = _fetch_url_playwright(url, config)
+            _respect_request_delay(config)
+            return rendered, "text/html; rendered=playwright"
         except Exception:
             if renderer == "auto":
-                raw, content_type = fetch_url(url, timeout=config.source.timeout_seconds, user_agent=config.source.user_agent)
+                raw, content_type = fetch_url(
+                    url,
+                    timeout=config.source.timeout_seconds,
+                    user_agent=config.source.user_agent,
+                    headers=config.source.headers,
+                )
+                _respect_request_delay(config)
                 return _apply_static_html_filters(raw, content_type, config), content_type
             raise
     raise ValueError(f"unsupported source renderer: {config.source.renderer}")
@@ -109,7 +130,9 @@ def _sitemap_url_items(config: PipelineConfig) -> list[dict[str, Any]]:
             sitemap_url,
             timeout=config.source.timeout_seconds,
             user_agent=config.source.user_agent,
+            headers=config.source.headers,
         )
+        _respect_request_delay(config)
         for url in _parse_sitemap_locations(xml_text):
             if _url_allowed(url, [], []):
                 items.append({"url": url, "order": order})
@@ -207,6 +230,15 @@ def _resolve_path(value: str, config: PipelineConfig) -> Path:
         candidate = config.config_path.parent / path
         if candidate.exists():
             return candidate
+    return path
+
+
+def _resolve_config_path(value: str, config: PipelineConfig) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    if config.config_path:
+        return config.config_path.parent / path
     return path
 
 
@@ -398,7 +430,13 @@ def _fetch_url_playwright(url: str, config: PipelineConfig) -> str:
     timeout_ms = max(1, int(config.source.timeout_seconds)) * 1000
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(user_agent=config.source.user_agent)
+        user_agent, extra_headers = _playwright_headers(config)
+        context_kwargs: dict[str, Any] = {"user_agent": user_agent}
+        if extra_headers:
+            context_kwargs["extra_http_headers"] = extra_headers
+        if config.source.storage_state:
+            context_kwargs["storage_state"] = str(_resolve_config_path(config.source.storage_state, config))
+        context = browser.new_context(**context_kwargs)
         page = context.new_page()
         try:
             page.goto(url, wait_until=config.source.wait_until, timeout=timeout_ms)
@@ -432,6 +470,30 @@ def _scroll_page(page: Any, max_scrolls: int) -> None:
     for _ in range(max(0, int(max_scrolls))):
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         time.sleep(0.4)
+
+
+def _request_headers(user_agent: str, headers: dict[str, str]) -> dict[str, str]:
+    request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
+    if not any(key.lower() == "user-agent" for key in request_headers):
+        request_headers["User-Agent"] = user_agent
+    return request_headers
+
+
+def _playwright_headers(config: PipelineConfig) -> tuple[str, dict[str, str]]:
+    headers = _request_headers(config.source.user_agent, config.source.headers)
+    user_agent = headers.pop("User-Agent", None)
+    if user_agent is None:
+        for key in list(headers):
+            if key.lower() == "user-agent":
+                user_agent = headers.pop(key)
+                break
+    return user_agent or config.source.user_agent, headers
+
+
+def _respect_request_delay(config: PipelineConfig) -> None:
+    delay = max(0.0, float(config.source.request_delay_seconds or 0))
+    if delay:
+        time.sleep(delay)
 
 
 def _url_allowed(url: str, include_patterns: list[str], exclude_patterns: list[str]) -> bool:
