@@ -79,6 +79,40 @@ class PipelineSmokeTest(unittest.TestCase):
             self.assertEqual(cfg.project.name, "starter")
             self.assertEqual(cfg.source.urls[0]["url"], "https://example.com/a")
 
+    def test_phase_limited_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            article = root / "article.md"
+            article.write_text("# Demo\n\nA short local article for phase testing.", encoding="utf-8")
+            config_path = root / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"name": "phase", "output_dir": str(root / "out")},
+                        "source": {
+                            "local_files": [
+                                {"path": str(article), "title": "Demo", "section": "1. Demo", "order": 1}
+                            ]
+                        },
+                        "translation": {"enabled": False},
+                        "tts": {"enabled": False, "provider": "none"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+            manifest = run_pipeline(config, to_phase="script")
+            out = root / "out"
+            self.assertEqual(manifest["to_phase"], "script")
+            self.assertTrue((out / "04_tts_script").exists())
+            self.assertFalse((out / "05_segments").exists())
+            self.assertTrue(inspect_run(out)["ok"])
+
+            manifest = run_pipeline(config, to_phase="segment", force=True)
+            self.assertEqual(manifest["to_phase"], "segment")
+            self.assertTrue((out / "05_segments").exists())
+            self.assertTrue(inspect_run(out)["ok"])
+
     def test_static_html_selector_filters(self) -> None:
         html = """
         <html>

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .config import load_config
 from .doctor import collect_doctor_report
-from .pipeline import run_pipeline
+from .pipeline import PHASES, run_pipeline
 from .status import inspect_run
 from .utils import slugify
 
@@ -21,6 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--output-dir", default="", help="Override output directory.")
     run_parser.add_argument("--force", action="store_true", help="Regenerate cached phase outputs.")
     run_parser.add_argument("--dry-run", action="store_true", help="Disable translation and TTS; useful for smoke tests.")
+    run_parser.add_argument("--from-phase", choices=PHASES, default="source", help="First phase to force/regenerate when --force is used.")
+    run_parser.add_argument("--to-phase", choices=PHASES, default="package", help="Stop after this phase.")
 
     subparsers.add_parser("doctor", help="Check local runtime dependencies.")
 
@@ -59,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
             config.translation.enabled = False
             config.tts.enabled = False
             config.tts.provider = "none"
-        manifest = run_pipeline(config, force=args.force)
+        manifest = run_pipeline(config, force=args.force, from_phase=args.from_phase, to_phase=args.to_phase)
         manifest_path = Path(config.project.output_dir).expanduser() / "manifest.json"
         summary = manifest.get("summary", {})
         print(json.dumps({"manifest": str(manifest_path), "summary": summary}, ensure_ascii=False, indent=2))

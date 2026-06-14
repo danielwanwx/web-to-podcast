@@ -6,12 +6,14 @@ from typing import Any
 
 
 STAGE_PATH_FIELDS = [
-    "raw_path",
-    "clean_text_path",
-    "translated_path",
-    "script_path",
-    "segment_manifest_path",
+    ("source", "raw_path"),
+    ("extract", "clean_text_path"),
+    ("translate", "translated_path"),
+    ("script", "script_path"),
+    ("segment", "segment_manifest_path"),
 ]
+PHASES = ["source", "extract", "translate", "script", "segment", "tts", "package"]
+PHASE_ORDER = {phase: index for index, phase in enumerate(PHASES)}
 
 
 def inspect_run(output_dir: Path | str, *, expect_audio: bool = False) -> dict[str, Any]:
@@ -22,6 +24,7 @@ def inspect_run(output_dir: Path | str, *, expect_audio: bool = False) -> dict[s
         "manifest_path": str(manifest_path),
         "manifest_exists": manifest_path.exists(),
         "expect_audio": bool(expect_audio),
+        "expected_to_phase": "package",
         "ok": False,
         "issues": [],
         "summary": {
@@ -49,9 +52,11 @@ def inspect_run(output_dir: Path | str, *, expect_audio: bool = False) -> dict[s
         report["issues"].append({"level": "error", "message": "manifest documents must be a list"})
         return report
 
+    expected_to_phase = _normalize_phase("package" if expect_audio else str(manifest.get("to_phase") or manifest.get("completed_to_phase") or "package"))
+    report["expected_to_phase"] = expected_to_phase
     report["summary"]["documents"] = len(documents)
     for doc in documents:
-        doc_report = _inspect_document(root, doc if isinstance(doc, dict) else {}, expect_audio=expect_audio)
+        doc_report = _inspect_document(root, doc if isinstance(doc, dict) else {}, expect_audio=expect_audio, expected_to_phase=expected_to_phase)
         report["documents"].append(doc_report)
         report["summary"]["stage_files_missing"] += len(doc_report["missing_stage_files"])
         report["summary"]["audio_completed"] += 1 if doc_report["audio_status"] == "completed" else 0
@@ -63,27 +68,29 @@ def inspect_run(output_dir: Path | str, *, expect_audio: bool = False) -> dict[s
     for doc_report in report["documents"]:
         for missing in doc_report["missing_stage_files"]:
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": f"missing stage file: {missing}"})
-        if doc_report["segment_manifest_missing"]:
+        if _phase_reached(expected_to_phase, "segment") and doc_report["segment_manifest_missing"]:
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": "segment manifest is missing"})
         if doc_report["segments"]["failed"]:
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": f"{doc_report['segments']['failed']} failed TTS segments"})
-        if doc_report["segments"]["pending"] and expect_audio:
+        if doc_report["segments"]["pending"] and _phase_reached(expected_to_phase, "tts"):
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": f"{doc_report['segments']['pending']} pending TTS segments"})
         if doc_report["segments"]["missing_audio"]:
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": f"{doc_report['segments']['missing_audio']} completed segment audio files are missing"})
         if doc_report["audio_missing"]:
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": "audio file is missing"})
-        if expect_audio and doc_report["audio_status"] != "completed":
+        if _phase_reached(expected_to_phase, "package") and expect_audio and doc_report["audio_status"] != "completed":
             report["issues"].append({"level": "error", "document": doc_report["title"], "message": f"audio status is {doc_report['audio_status']}"})
 
     report["ok"] = not any(issue.get("level") == "error" for issue in report["issues"])
     return report
 
 
-def _inspect_document(root: Path, doc: dict[str, Any], *, expect_audio: bool) -> dict[str, Any]:
+def _inspect_document(root: Path, doc: dict[str, Any], *, expect_audio: bool, expected_to_phase: str) -> dict[str, Any]:
     title = str(doc.get("title") or doc.get("id") or "Untitled")
     missing_stage_files: list[str] = []
-    for field in STAGE_PATH_FIELDS:
+    for phase, field in STAGE_PATH_FIELDS:
+        if not _phase_reached(expected_to_phase, phase):
+            continue
         value = str(doc.get(field) or "")
         if not value:
             missing_stage_files.append(field)
@@ -93,7 +100,7 @@ def _inspect_document(root: Path, doc: dict[str, Any], *, expect_audio: bool) ->
 
     segment_manifest_value = str(doc.get("segment_manifest_path") or "")
     segment_manifest_path = _resolve_output_path(root, segment_manifest_value) if segment_manifest_value else root / "__missing_segments.json"
-    segment_report = _inspect_segments(segment_manifest_path)
+    segment_report = _inspect_segments(segment_manifest_path) if _phase_reached(expected_to_phase, "segment") else _empty_segment_summary()
 
     audio = doc.get("audio") if isinstance(doc.get("audio"), dict) else {}
     audio_status = str(audio.get("status") or "unknown")
@@ -101,7 +108,7 @@ def _inspect_document(root: Path, doc: dict[str, Any], *, expect_audio: bool) ->
     audio_missing = False
     if audio_status == "completed":
         audio_missing = not audio_path or not _resolve_output_path(root, audio_path).exists()
-    elif expect_audio:
+    elif expect_audio or _phase_reached(expected_to_phase, "package") and audio_status == "completed":
         audio_missing = True
 
     return {
@@ -147,6 +154,19 @@ def _inspect_segments(segment_manifest_path: Path) -> dict[str, int]:
     return summary
 
 
+def _empty_segment_summary() -> dict[str, int]:
+    return {"total": 0, "completed": 0, "skipped": 0, "failed": 0, "pending": 0, "missing_audio": 0}
+
+
 def _resolve_output_path(root: Path, value: str) -> Path:
     path = Path(value).expanduser()
     return path if path.is_absolute() else root / path
+
+
+def _normalize_phase(phase: str) -> str:
+    normalized = (phase or "").strip().lower()
+    return normalized if normalized in PHASE_ORDER else "package"
+
+
+def _phase_reached(to_phase: str, phase: str) -> bool:
+    return PHASE_ORDER[_normalize_phase(to_phase)] >= PHASE_ORDER[phase]

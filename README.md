@@ -148,6 +148,22 @@ output:
 The pipeline writes every phase to disk. If a run stops halfway, rerun the same
 command and completed files are reused. Add `--force` to regenerate.
 
+For large resources, run or regenerate the pipeline in phases:
+
+```bash
+# Stop after translation and inspect the local Chinese drafts.
+web-to-podcast run --config my-resource.yaml --to-phase translate
+
+# Stop after TTS scripts for manual review.
+web-to-podcast run --config my-resource.yaml --to-phase script
+
+# Regenerate only TTS/package stages from existing text artifacts.
+web-to-podcast run --config my-resource.yaml --from-phase tts --force
+```
+
+Available phases are `source`, `extract`, `translate`, `script`, `segment`,
+`tts`, and `package`.
+
 ## Run Status
 
 Inspect a run directory at any time:
