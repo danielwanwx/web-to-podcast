@@ -16,6 +16,7 @@ from web_to_podcast.sources import collect_sources
 from web_to_podcast.sources import fetch_url
 from web_to_podcast.status import inspect_run
 from web_to_podcast.document import SourceDocument
+import web_to_podcast.pipeline as pipeline_module
 import web_to_podcast.sources as sources_module
 
 
@@ -233,6 +234,42 @@ class PipelineSmokeTest(unittest.TestCase):
 
             manifest = run_pipeline(config, to_phase="segment", force=True)
             self.assertEqual(manifest["to_phase"], "segment")
+            self.assertTrue((out / "05_segments").exists())
+            self.assertTrue(inspect_run(out)["ok"])
+
+    def test_late_phase_resume_uses_manifest_without_refetching_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            article = root / "article.md"
+            article.write_text("# Demo\n\nResume without network.", encoding="utf-8")
+            config_path = root / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "project": {"name": "resume", "output_dir": str(root / "out")},
+                        "source": {
+                            "local_files": [
+                                {"path": str(article), "title": "Demo", "section": "1. Demo", "order": 1}
+                            ]
+                        },
+                        "translation": {"enabled": False},
+                        "tts": {"enabled": False, "provider": "none"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(config_path)
+            run_pipeline(config, to_phase="script")
+
+            original_collect_sources = pipeline_module.collect_sources
+            pipeline_module.collect_sources = lambda _config: (_ for _ in ()).throw(RuntimeError("source collection should not run"))
+            try:
+                manifest = run_pipeline(config, from_phase="segment", to_phase="segment", force=True)
+            finally:
+                pipeline_module.collect_sources = original_collect_sources
+
+            out = root / "out"
+            self.assertTrue(manifest["resumed_from_manifest"])
             self.assertTrue((out / "05_segments").exists())
             self.assertTrue(inspect_run(out)["ok"])
 

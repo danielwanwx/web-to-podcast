@@ -23,6 +23,10 @@ Every stage is file-backed and resumable:
 6. `tts`: synthesize WAV segments with VibeVoice.
 7. `package`: concatenate with natural pauses and encode M4A.
 
+When a run starts from a later phase, the pipeline first reconstructs documents
+from the existing manifest and local stage files. This allows translation,
+script, TTS, and packaging retries without re-fetching the source website.
+
 ## Extension Points
 
 - Add new source providers under `web_to_podcast/sources.py`.

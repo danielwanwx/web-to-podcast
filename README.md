@@ -209,6 +209,10 @@ web-to-podcast run --config my-resource.yaml --from-phase tts --force
 Available phases are `source`, `extract`, `translate`, `script`, `segment`,
 `tts`, and `package`.
 
+When `--from-phase` is later than `source`, the pipeline first tries to resume
+from the existing `manifest.json` and local stage files, so later-stage retries
+do not need to fetch the website again.
+
 ## Run Status
 
 Inspect a run directory at any time:

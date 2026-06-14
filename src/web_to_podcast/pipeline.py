@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import json
 from pathlib import Path
 from typing import Any
 
@@ -38,19 +39,22 @@ def run_pipeline(
     if _phase_in_window("tts", from_phase, to_phase) or _phase_in_window("package", from_phase, to_phase):
         _prepare_voice_sample(config, output_root)
 
+    previous_manifest = _load_existing_manifest(output_root / "manifest.json")
+    documents = _documents_for_run(config, output_root, from_phase, previous_manifest)
+
     manifest: dict[str, Any] = {
         "project": asdict(config.project),
         "started_at": now_iso(),
         "output_root": str(output_root),
         "from_phase": from_phase,
         "to_phase": to_phase,
+        "resumed_from_manifest": bool(PHASE_ORDER[from_phase] > PHASE_ORDER["source"] and previous_manifest),
         "completed_to_phase": "",
         "documents": [],
         "summary": {},
     }
     write_json(output_root / "manifest.json", manifest)
 
-    documents = collect_sources(config)
     for doc in documents:
         entry = _process_document(doc, config, output_root, force=force, from_phase=from_phase, to_phase=to_phase)
         manifest["documents"].append(entry)
@@ -76,17 +80,25 @@ def _process_document(
     to_phase: str,
 ) -> dict[str, Any]:
     entry = _base_entry(doc)
+    if doc.metadata.get("manifest_entry") and isinstance(doc.metadata.get("manifest_entry"), dict):
+        entry.update(_preserve_manifest_paths(doc.metadata["manifest_entry"]))
 
-    raw_path = _write_raw_source(doc, output_root, force=_force_phase(force, from_phase, "source"))
-    entry["raw_path"] = repo_relative(raw_path, output_root)
-    entry["completed_to_phase"] = "source"
+    if PHASE_ORDER[from_phase] <= PHASE_ORDER["source"]:
+        raw_path = _write_raw_source(doc, output_root, force=_force_phase(force, from_phase, "source"))
+        entry["raw_path"] = repo_relative(raw_path, output_root)
+    else:
+        raw_path = _resolve_output_path(output_root, str(entry.get("raw_path") or ""))
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "source")
     if _stop_at(to_phase, "source"):
         return entry
 
-    title, clean_text = extract_readable_text(doc, extractor=config.source.extractor)
-    if title and title != doc.title:
-        doc.title = title
-        entry["title"] = doc.title
+    if PHASE_ORDER[from_phase] <= PHASE_ORDER["extract"]:
+        title, clean_text = extract_readable_text(doc, extractor=config.source.extractor)
+        if title and title != doc.title:
+            doc.title = title
+            entry["title"] = doc.title
+    else:
+        clean_text = _read_required_stage(output_root, entry, "clean_text_path", "extract")
 
     clean_path = output_root / "02_clean_text" / f"{doc.slug}.md"
     if _force_phase(force, from_phase, "extract") or not clean_path.exists():
@@ -94,27 +106,35 @@ def _process_document(
     else:
         clean_text = clean_path.read_text(encoding="utf-8")
     entry["clean_text_path"] = repo_relative(clean_path, output_root)
-    entry["completed_to_phase"] = "extract"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "extract")
     if _stop_at(to_phase, "extract"):
         return entry
 
     translated_dir = output_root / "03_translated" / doc.slug
-    translated_text = translate_document(doc.title, clean_text, translated_dir, config.translation, force=_force_phase(force, from_phase, "translate"))
+    if PHASE_ORDER[from_phase] <= PHASE_ORDER["translate"]:
+        translated_text = translate_document(doc.title, clean_text, translated_dir, config.translation, force=_force_phase(force, from_phase, "translate"))
+    else:
+        translated_text = _read_required_stage(output_root, entry, "translated_path", "translate")
     translated_path = translated_dir / "translated.md"
     entry["translated_path"] = repo_relative(translated_path, output_root)
-    entry["completed_to_phase"] = "translate"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "translate")
     if _stop_at(to_phase, "translate"):
         return entry
 
-    script_text, script_audit = render_tts_script(translated_text, language=config.translation.target_language)
     script_path = output_root / "04_tts_script" / f"{doc.slug}.md"
+    if PHASE_ORDER[from_phase] <= PHASE_ORDER["script"]:
+        script_text, script_audit = render_tts_script(translated_text, language=config.translation.target_language)
+    else:
+        script_text = _read_required_stage(output_root, entry, "script_path", "script")
+        script_audit = {}
     if _force_phase(force, from_phase, "script") or not script_path.exists():
         write_text(script_path, script_text.strip() + "\n")
-        write_json(output_root / "04_tts_script" / f"{doc.slug}.audit.json", script_audit)
+        if script_audit:
+            write_json(output_root / "04_tts_script" / f"{doc.slug}.audit.json", script_audit)
     else:
         script_text = script_path.read_text(encoding="utf-8")
     entry["script_path"] = repo_relative(script_path, output_root)
-    entry["completed_to_phase"] = "script"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "script")
     if _stop_at(to_phase, "script"):
         return entry
 
@@ -124,7 +144,7 @@ def _process_document(
     write_segment_manifest(segment_manifest_path, segments)
     entry["segment_manifest_path"] = repo_relative(segment_manifest_path, output_root)
     entry["segment_count"] = len(segments)
-    entry["completed_to_phase"] = "segment"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "segment")
     if _stop_at(to_phase, "segment"):
         return entry
 
@@ -133,7 +153,7 @@ def _process_document(
 
     completed_wavs = [Path(item["audio_path"]) for item in tts_segments if item.get("status") == "completed" and item.get("audio_path")]
     entry["tts_completed"] = len(completed_wavs)
-    entry["completed_to_phase"] = "tts"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "tts")
     if _stop_at(to_phase, "tts"):
         return entry
 
@@ -147,7 +167,7 @@ def _process_document(
             config=config.output,
         )
     entry["audio"] = package_info
-    entry["completed_to_phase"] = "package"
+    entry["completed_to_phase"] = max_phase(entry.get("completed_to_phase"), "package")
     return entry
 
 
@@ -222,11 +242,104 @@ def _base_entry(doc: SourceDocument) -> dict[str, Any]:
     }
 
 
+def _documents_for_run(
+    config: PipelineConfig,
+    output_root: Path,
+    from_phase: str,
+    previous_manifest: dict[str, Any] | None,
+) -> list[SourceDocument]:
+    if PHASE_ORDER[from_phase] <= PHASE_ORDER["source"] or not previous_manifest:
+        return collect_sources(config)
+    docs = _documents_from_manifest(output_root, previous_manifest)
+    return docs or collect_sources(config)
+
+
+def _documents_from_manifest(output_root: Path, manifest: dict[str, Any]) -> list[SourceDocument]:
+    raw_docs = manifest.get("documents") if isinstance(manifest, dict) else []
+    if not isinstance(raw_docs, list):
+        return []
+    docs: list[SourceDocument] = []
+    for item in raw_docs:
+        if not isinstance(item, dict):
+            continue
+        raw_path = _resolve_output_path(output_root, str(item.get("raw_path") or ""))
+        clean_path = _resolve_output_path(output_root, str(item.get("clean_text_path") or ""))
+        if raw_path.exists():
+            raw_text = raw_path.read_text(encoding="utf-8", errors="replace")
+            media_type = "text/html" if raw_path.suffix.lower() in {".html", ".htm"} else "text/markdown"
+        elif clean_path.exists():
+            raw_text = clean_path.read_text(encoding="utf-8", errors="replace")
+            media_type = "text/markdown"
+        else:
+            continue
+        docs.append(
+            SourceDocument(
+                id=str(item.get("id") or ""),
+                title=str(item.get("title") or "Untitled"),
+                raw_text=raw_text,
+                source_url=str(item.get("source_url") or ""),
+                source_path=str(item.get("source_path") or ""),
+                section=str(item.get("section") or ""),
+                order=_optional_int(item.get("order")),
+                media_type=media_type,
+                metadata={"manifest_entry": item},
+            )
+        )
+    return docs
+
+
+def _preserve_manifest_paths(entry: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "raw_path",
+        "clean_text_path",
+        "translated_path",
+        "script_path",
+        "segment_manifest_path",
+        "segment_count",
+        "tts_completed",
+        "completed_to_phase",
+        "audio",
+    ]
+    return {key: entry[key] for key in keys if key in entry}
+
+
+def _read_required_stage(output_root: Path, entry: dict[str, Any], field: str, phase: str) -> str:
+    value = str(entry.get(field) or "")
+    path = _resolve_output_path(output_root, value)
+    if not value or not path.exists():
+        raise FileNotFoundError(f"cannot resume from phase {phase}: missing {field} ({value or 'empty'})")
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _load_existing_manifest(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _resolve_output_path(output_root: Path, value: str) -> Path:
+    if not value:
+        return output_root / "__missing__"
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else output_root / path
+
+
 def _normalize_phase(phase: str) -> str:
     normalized = (phase or "").strip().lower()
     if normalized not in PHASE_ORDER:
         raise ValueError(f"unknown phase {phase!r}; expected one of: {', '.join(PHASES)}")
     return normalized
+
+
+def max_phase(left: Any, right: str) -> str:
+    left_phase = str(left or "")
+    if left_phase not in PHASE_ORDER:
+        return right
+    return left_phase if PHASE_ORDER[left_phase] >= PHASE_ORDER[right] else right
 
 
 def _phase_in_window(phase: str, from_phase: str, to_phase: str) -> bool:
@@ -239,3 +352,9 @@ def _force_phase(force: bool, from_phase: str, phase: str) -> bool:
 
 def _stop_at(to_phase: str, phase: str) -> bool:
     return PHASE_ORDER[to_phase] <= PHASE_ORDER[phase]
+
+
+def _optional_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
