@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -99,6 +100,16 @@ class PipelineSmokeTest(unittest.TestCase):
             path = root / script
             self.assertTrue(path.exists(), script)
             self.assertTrue(os.access(path, os.X_OK), script)
+
+    def test_public_examples_use_placeholder_urls(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        examples_dir = root / "examples"
+        for example in examples_dir.iterdir():
+            if not example.is_file():
+                continue
+            text = example.read_text(encoding="utf-8")
+            for match in re.findall(r"https?://([^/\s\"']+)", text):
+                self.assertEqual(match, "example.com", f"{example.name} uses a real host: {match}")
 
     def test_config_aware_doctor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

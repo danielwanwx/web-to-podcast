@@ -1,6 +1,11 @@
 # web-to-podcast
 
-Reusable local pipeline for turning web resources into translated podcast audio.
+Reusable local-first pipeline for turning web resources and documents into
+translated podcast audio.
+
+Status: alpha developer tool. This project is intended for lawful personal,
+internal, research, or archival workflows where you have the rights and
+authorization needed to process the source material and any voice samples.
 
 It is designed for the workflow we validated locally:
 
@@ -9,11 +14,24 @@ It is designed for the workflow we validated locally:
 3. Translate with a local Gemma model through Ollama.
 4. Render a TTS-friendly narration script.
 5. Split the script into short, pause-aware segments.
-6. Generate audio with VibeVoice using a local voice sample.
+6. Generate audio with VibeVoice using an authorized local voice sample.
 7. Package organized M4A files and a resumable manifest.
 
-The project is not tied to HelloInterview. HelloInterview is only an example
-configuration profile.
+## Appropriate Use
+
+Use this project only with content that you are allowed to access, copy,
+transform, translate, and convert to audio. The repository does not include
+scraped source pages, translations, generated audio, credentials, cookies, or
+voice samples.
+
+Do not use this project to bypass paywalls, access controls, rate limits, or
+site terms; to redistribute copyrighted material without permission; to clone,
+impersonate, or misrepresent a person's voice; or to publish private or
+sensitive content without authorization.
+
+This repository provides software and operational guardrails, not legal advice.
+See [docs/legal-and-safety.md](docs/legal-and-safety.md) before using the
+pipeline on third-party sites or voice samples.
 
 ## Quick Start
 
@@ -233,7 +251,9 @@ failed or pending TTS chunks, and final audio paths.
 ## JavaScript Pages
 
 For sites where the article is rendered after JavaScript runs, configure the
-browser renderer and narrow extraction to the article body:
+browser renderer and narrow extraction to the article body. Only use
+authenticated browser state for accounts, content, and sites where you have
+permission to automate access:
 
 ```yaml
 source:
@@ -258,7 +278,8 @@ source:
 ```
 
 `storage_state` is a Playwright storage-state JSON file. It is useful for pages
-that require a logged-in browser session. Do not commit auth state files. See
+that require a logged-in browser session. Do not commit auth state files, and
+do not use them to bypass access restrictions. See
 [docs/authenticated-sites.md](docs/authenticated-sites.md) for a short setup
 guide.
 
@@ -286,8 +307,12 @@ Use `extractor: trafilatura` if you want missing trafilatura to fail loudly.
 
 ## Notes
 
-Only use this pipeline for resources you are allowed to process. Voice samples
-should be your own voice or voices you have permission to use.
+The MIT license covers this software only. It does not grant rights to any
+third-party content, website text, translated text, generated audio, voice
+samples, model weights, or external tools used with the pipeline.
+
+Before publishing a fork or public repository, review
+[docs/open-source-checklist.md](docs/open-source-checklist.md).
 
 ## Publish To GitHub
 

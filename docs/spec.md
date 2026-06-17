@@ -3,13 +3,18 @@
 ## Goal
 
 Provide a cloneable repository that can convert many web/document resources into
-local translated podcast audio without hard-coding one site.
+local translated podcast audio without hard-coding one site. The repository is
+designed to ship software only, not third-party content or generated media.
 
 ## Non-goals
 
 - Hosting generated content.
 - Shipping copyrighted source pages, translations, or generated audio.
 - Requiring a cloud TTS or cloud LLM.
+- Helping users bypass access controls, paywalls, site terms, or copyright
+  restrictions.
+- Verifying that a particular source, output, or voice sample is legally safe to
+  use.
 
 ## Pipeline Contract
 
@@ -44,3 +49,5 @@ script, TTS, and packaging retries without re-fetching the source website.
 - Audio generation can run in an isolated subprocess to release model memory
   between articles.
 - Reference-sample audio leakage is checked and trimmed/rejected when enabled.
+- Public examples should use redistributable sample files or placeholder
+  domains rather than real restricted content.

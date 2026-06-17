@@ -14,8 +14,9 @@ For audio generation:
 2. Install VibeVoice in the same virtual environment if your environment does
    not already provide it.
 
-3. Prepare a voice sample file. Any ffmpeg-readable audio or video can be used;
-   the pipeline normalizes it to mono 24 kHz WAV in `00_voice/`.
+3. Prepare an authorized voice sample file. Use your own voice or a voice you
+   have explicit permission to synthesize. Any ffmpeg-readable audio or video
+   can be used; the pipeline normalizes it to mono 24 kHz WAV in `00_voice/`.
 
 4. Check the full workflow.
 
@@ -48,3 +49,7 @@ tts:
 `isolate_process: true` is the recommended default for long batches because it
 keeps each article generation in a subprocess and makes memory recovery more
 predictable.
+
+Do not publish generated audio in a way that impersonates a real person or
+implies endorsement. If you distribute synthetic audio, label it clearly when
+required or appropriate.

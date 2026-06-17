@@ -1,7 +1,9 @@
 # Authenticated Sites
 
-Some learning portals render content only after login. Use the Playwright
-renderer with a storage-state JSON file for these sources.
+Some sites render content only after login. Use the Playwright renderer with a
+storage-state JSON file only when you are authorized to automate access to that
+account and content. This feature is not intended to bypass paywalls, access
+controls, bot restrictions, or site terms.
 
 1. Install browser support.
 
@@ -40,3 +42,5 @@ renderer with a storage-state JSON file for these sources.
 Relative `storage_state` paths are resolved from the config file's directory.
 
 Do not commit `auth/` or storage-state files. They can contain login cookies.
+Treat them like credentials, keep request rates conservative, and stop using the
+pipeline if the site blocks or asks automated clients not to access the content.
